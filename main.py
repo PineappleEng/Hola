@@ -50,7 +50,7 @@ def crear_mapa_satelital(
     print(f"Detalle: {error}")
 
 if __name__ == "__main__":
-  # Ejemplo: Ciudad de México
+  # Ciudad de mexico
   latitud = 19.4326
   longitud = -99.1332
   crear_mapa_satelital(
