@@ -34,20 +34,8 @@ def crear_mapa_satelital(
     control=True
   ).add_to(mapa)
 
-  # Añadir marcador en el punto central solo si se solicita
-  if mostrar_marcador:
-    folium.Marker(
-      [lat, lon],
-      popup=f"Centro: ({lat}, {lon})",
-      tooltip="Punto central"
-    ).add_to(mapa)
-
   # Control para activar/desactivar capas
   folium.LayerControl().add_to(mapa)
-
-  # Guardar HTML
-  mapa.save(archivo_html)
-  print(f"Mapa guardado en HTML: {archivo_html}")
 
   # Exportar PNG en alta resolución.
   # Requiere selenium y un webdriver disponible en el sistema.
