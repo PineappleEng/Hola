@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tiles x,y,z desde coordenadas tipo Google Maps</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body { margin: 0; height: 100%; font-family: sans-serif; }
+    #map { height: 100%; }
+    .panel {
+      position: absolute;
+      top: 10px; left: 10px;
+      z-index: 1000;
+      background: white;
+      padding: 10px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      width: 320px;
+    }
+    .panel input, .panel button {
+      width: 100%;
+      margin-top: 6px;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+    .small { font-size: 12px; color: #555; }
+    #result { margin-top: 8px; font-size: 14px; line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <strong>Coordenadas tipo Google Maps</strong>
+    <div class="small">Formato: <code>lat,lng</code> (ej. <code>19.4326,-99.1332</code>)</div>
+
+    <input id="coords" value="19.4326,-99.1332" />
+    <input id="zoom" type="number" min="0" max="19" value="12" />
+    <button id="go">Ir a coordenadas</button>
+
+    <div id="result"></div>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([19.4326, -99.1332], 12);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    let marker = L.marker([19.4326, -99.1332]).addTo(map);
+
+    function latLonToTile(lat, lon, z) {
+      const latRad = lat * Math.PI / 180;
+      const n = Math.pow(2, z);
+      const x = Math.floor((lon + 180) / 360 * n);
+      const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+      return { x, y, z };
+    }
+
+    function parseGoogleCoords(text) {
+      // Acepta "lat,lng" con o sin espacios
+      const m = text.trim().match(/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
+      if (!m) return null;
+      const lat = parseFloat(m[1]);
+      const lng = parseFloat(m[3]);
+
+      if (lat < -85.0511 || lat > 85.0511) return null; // límite Web Mercator
+      if (lng < -180 || lng > 180) return null;
+      return { lat, lng };
+    }
+
+    function updateFromInput() {
+      const coordText = document.getElementById('coords').value;
+      const zoom = parseInt(document.getElementById('zoom').value, 10);
+
+      const p = parseGoogleCoords(coordText);
+      const result = document.getElementById('result');
+
+      if (!p || isNaN(zoom) || zoom < 0 || zoom > 19) {
+        result.innerHTML = '⚠️ Coordenadas o zoom inválidos.';
+        return;
+      }
+
+      map.setView([p.lat, p.lng], zoom);
+      marker.setLatLng([p.lat, p.lng]);
+
+      const { x, y, z } = latLonToTile(p.lat, p.lng, zoom);
+      const url = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+
+      result.innerHTML = `
+        <b>Lat:</b> ${p.lat}<br>
+        <b>Lng:</b> ${p.lng}<br>
+        <b>Tile:</b> z=${z}, x=${x}, y=${y}<br>
+        <a href="${url}" target="_blank">Ver tile PNG</a>
+      `;
+    }
+
+    document.getElementById('go').addEventListener('click', updateFromInput);
+
+    // También al presionar Enter en el input
+    document.getElementById('coords').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') updateFromInput();
+    });
+
+    // Inicial
+    updateFromInput();
+  </script>
+</body>
+</html>
