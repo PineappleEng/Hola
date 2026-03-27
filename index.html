@@ -3,56 +3,102 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Tiles x,y,z desde coordenadas tipo Google Maps</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <title>Mapa Satelital + Tiles x,y,z</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
   <style>
-    html, body { margin: 0; height: 100%; font-family: sans-serif; }
-    #map { height: 100%; }
+    html, body { margin: 0; height: 100%; font-family: Arial, sans-serif; }
+    #map { height: 100%; width: 100%; }
+
     .panel {
       position: absolute;
-      top: 10px; left: 10px;
+      top: 12px; left: 12px;
       z-index: 1000;
-      background: white;
-      padding: 10px;
+      background: #fff;
+      padding: 12px;
       border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,.2);
-      width: 320px;
+      box-shadow: 0 3px 12px rgba(0,0,0,.2);
+      width: 340px;
     }
+
+    .panel h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+
+    .panel .hint {
+      font-size: 12px;
+      color: #555;
+      margin-bottom: 8px;
+    }
+
+    .panel label {
+      display: block;
+      font-size: 13px;
+      margin-top: 8px;
+      margin-bottom: 4px;
+    }
+
     .panel input, .panel button {
       width: 100%;
-      margin-top: 6px;
-      padding: 8px;
       box-sizing: border-box;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 14px;
     }
-    .small { font-size: 12px; color: #555; }
-    #result { margin-top: 8px; font-size: 14px; line-height: 1.4; }
+
+    .panel button {
+      margin-top: 10px;
+      cursor: pointer;
+      border: none;
+      background: #2563eb;
+      color: white;
+      font-weight: 600;
+    }
+
+    .panel button:hover {
+      background: #1d4ed8;
+    }
+
+    #result {
+      margin-top: 10px;
+      padding: 8px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+
+    #result a { color: #0f766e; text-decoration: none; }
+    #result a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <div class="panel">
-    <strong>Coordenadas tipo Google Maps</strong>
-    <div class="small">Formato: <code>lat,lng</code> (ej. <code>19.4326,-99.1332</code>)</div>
+    <h3>Coordenadas tipo Google Maps</h3>
+    <div class="hint">Formato: <b>lat,lng</b> (ejemplo CDMX: <code>19.4326,-99.1332</code>)</div>
 
+    <label for="coords">Coordenadas</label>
     <input id="coords" value="19.4326,-99.1332" />
-    <input id="zoom" type="number" min="0" max="19" value="12" />
-    <button id="go">Ir a coordenadas</button>
 
-    <div id="result"></div>
+    <label for="zoom">Zoom (0–19)</label>
+    <input id="zoom" type="number" min="0" max="19" value="12" />
+
+    <button id="go">Actualizar mapa</button>
+
+    <div id="result">Cargando...</div>
   </div>
 
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
-    const map = L.map('map').setView([19.4326, -99.1332], 12);
-
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-
-    let marker = L.marker([19.4326, -99.1332]).addTo(map);
-
+    // ---------- Utilidades ----------
     function latLonToTile(lat, lon, z) {
       const latRad = lat * Math.PI / 180;
       const n = Math.pow(2, z);
@@ -62,52 +108,98 @@
     }
 
     function parseGoogleCoords(text) {
-      // Acepta "lat,lng" con o sin espacios
+      // Acepta: "19.4326,-99.1332" con espacios opcionales
       const m = text.trim().match(/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
       if (!m) return null;
+
       const lat = parseFloat(m[1]);
       const lng = parseFloat(m[3]);
 
-      if (lat < -85.0511 || lat > 85.0511) return null; // límite Web Mercator
+      // Límites Web Mercator
+      if (lat < -85.0511 || lat > 85.0511) return null;
       if (lng < -180 || lng > 180) return null;
+
       return { lat, lng };
     }
 
-    function updateFromInput() {
-      const coordText = document.getElementById('coords').value;
-      const zoom = parseInt(document.getElementById('zoom').value, 10);
+    // ---------- Capas ----------
+    const osm = L.tileLayer(
+      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }
+    );
 
-      const p = parseGoogleCoords(coordText);
+    const esriSat = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 19, attribution: 'Tiles &copy; Esri' }
+    );
+
+    // ---------- Mapa ----------
+    const map = L.map('map', {
+      center: [19.4326, -99.1332],
+      zoom: 12,
+      layers: [esriSat] // iniciar en satelital
+    });
+
+    L.control.layers(
+      {
+        "Satelital (Esri)": esriSat,
+        "Calles (OSM)": osm
+      },
+      {}
+    ).addTo(map);
+
+    let marker = L.marker([19.4326, -99.1332]).addTo(map);
+
+    function updateUI(lat, lng, zoom) {
       const result = document.getElementById('result');
+      const { x, y, z } = latLonToTile(lat, lng, zoom);
 
-      if (!p || isNaN(zoom) || zoom < 0 || zoom > 19) {
-        result.innerHTML = '⚠️ Coordenadas o zoom inválidos.';
-        return;
-      }
-
-      map.setView([p.lat, p.lng], zoom);
-      marker.setLatLng([p.lat, p.lng]);
-
-      const { x, y, z } = latLonToTile(p.lat, p.lng, zoom);
-      const url = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+      const osmTile = `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+      const esriTile = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
 
       result.innerHTML = `
-        <b>Lat:</b> ${p.lat}<br>
-        <b>Lng:</b> ${p.lng}<br>
+        <b>Lat:</b> ${lat.toFixed(6)}<br>
+        <b>Lng:</b> ${lng.toFixed(6)}<br>
         <b>Tile:</b> z=${z}, x=${x}, y=${y}<br>
-        <a href="${url}" target="_blank">Ver tile PNG</a>
+        <a href="${osmTile}" target="_blank">Ver tile OSM</a><br>
+        <a href="${esriTile}" target="_blank">Ver tile Satelital (Esri)</a>
       `;
     }
 
-    document.getElementById('go').addEventListener('click', updateFromInput);
+    function goToInputCoords() {
+      const coordText = document.getElementById('coords').value;
+      const zoom = parseInt(document.getElementById('zoom').value, 10);
+      const parsed = parseGoogleCoords(coordText);
 
-    // También al presionar Enter en el input
+      if (!parsed || Number.isNaN(zoom) || zoom < 0 || zoom > 19) {
+        document.getElementById('result').innerHTML = '⚠️ Coordenadas o zoom inválidos.';
+        return;
+      }
+
+      map.setView([parsed.lat, parsed.lng], zoom);
+      marker.setLatLng([parsed.lat, parsed.lng]);
+      updateUI(parsed.lat, parsed.lng, zoom);
+    }
+
+    // Click en mapa: actualiza coordenadas + tiles
+    map.on('click', (e) => {
+      const { lat, lng } = e.latlng;
+      const zoom = map.getZoom();
+
+      marker.setLatLng([lat, lng]);
+      document.getElementById('coords').value = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+      document.getElementById('zoom').value = zoom;
+
+      updateUI(lat, lng, zoom);
+    });
+
+    document.getElementById('go').addEventListener('click', goToInputCoords);
     document.getElementById('coords').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') updateFromInput();
+      if (e.key === 'Enter') goToInputCoords();
     });
 
     // Inicial
-    updateFromInput();
+    goToInputCoords();
   </script>
 </body>
 </html>
